@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A secure login system with hashed passwords, session management, and optional two-factor authentication." />
+  <title>SecureVault — Login System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <!-- Particle Background Canvas -->
+  <canvas id="particles-canvas"></canvas>
+
+  <!-- App Container -->
+  <div id="app">
+
+    <!-- ============================================================== -->
+    <!-- LOGIN VIEW -->
+    <!-- ============================================================== -->
+    <div id="view-login" class="view active">
+      <div class="auth-card glass-card">
+        <div class="card-header">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <circle cx="12" cy="16" r="1"/>
+            </svg>
+          </div>
+          <h1>Welcome Back</h1>
+          <p class="subtitle">Sign in to your SecureVault account</p>
+        </div>
+
+        <form id="login-form" autocomplete="on" novalidate>
+          <div class="input-group">
+            <input type="text" id="login-username" name="username" autocomplete="username" required />
+            <label for="login-username">Username</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+          </div>
+          <div class="input-group">
+            <input type="password" id="login-password" name="password" autocomplete="current-password" required />
+            <label for="login-password">Password</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            <button type="button" class="toggle-password" data-target="login-password" aria-label="Toggle password visibility">
+              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <button type="submit" class="btn btn-primary" id="login-btn">
+            <span class="btn-text">Sign In</span>
+            <span class="btn-loader" style="display:none"></span>
+          </button>
+        </form>
+
+        <div class="card-footer">
+          <p>Don't have an account? <a href="#" id="go-register">Create one</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- REGISTER VIEW -->
+    <!-- ============================================================== -->
+    <div id="view-register" class="view">
+      <div class="auth-card glass-card">
+        <div class="card-header">
+          <div class="logo-icon register-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
+            </svg>
+          </div>
+          <h1>Create Account</h1>
+          <p class="subtitle">Join SecureVault today</p>
+        </div>
+
+        <form id="register-form" autocomplete="on" novalidate>
+          <div class="input-group">
+            <input type="text" id="reg-username" name="username" autocomplete="username" required />
+            <label for="reg-username">Username</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+          </div>
+          <div class="input-group">
+            <input type="email" id="reg-email" name="email" autocomplete="email" required />
+            <label for="reg-email">Email</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </span>
+          </div>
+          <div class="input-group">
+            <input type="password" id="reg-password" name="password" autocomplete="new-password" required />
+            <label for="reg-password">Password</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            <button type="button" class="toggle-password" data-target="reg-password" aria-label="Toggle password visibility">
+              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <!-- Password Strength Meter -->
+          <div class="password-strength" id="password-strength">
+            <div class="strength-bar">
+              <div class="strength-fill" id="strength-fill"></div>
+            </div>
+            <span class="strength-label" id="strength-label"></span>
+          </div>
+
+          <div class="input-group">
+            <input type="password" id="reg-confirm" name="confirm" autocomplete="new-password" required />
+            <label for="reg-confirm">Confirm Password</label>
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </span>
+          </div>
+          <button type="submit" class="btn btn-primary" id="register-btn">
+            <span class="btn-text">Create Account</span>
+            <span class="btn-loader" style="display:none"></span>
+          </button>
+        </form>
+
+        <div class="card-footer">
+          <p>Already have an account? <a href="#" id="go-login">Sign in</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 2FA VERIFICATION VIEW (during login) -->
+    <!-- ============================================================== -->
+    <div id="view-2fa-verify" class="view">
+      <div class="auth-card glass-card compact-card">
+        <div class="card-header">
+          <div class="logo-icon twofa-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h1>Two-Factor Auth</h1>
+          <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
+        </div>
+
+        <form id="twofa-verify-form" novalidate>
+          <div class="otp-input-group" id="otp-group-verify">
+            <input type="text" maxlength="1" class="otp-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" />
+            <input type="text" maxlength="1" class="otp-input" data-index="1" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="2" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="3" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="4" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="5" inputmode="numeric" />
+          </div>
+          <button type="submit" class="btn btn-primary" id="verify-2fa-btn">
+            <span class="btn-text">Verify</span>
+            <span class="btn-loader" style="display:none"></span>
+          </button>
+        </form>
+
+        <div class="card-footer">
+          <p><a href="#" id="go-back-login">← Back to login</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- DASHBOARD VIEW -->
+    <!-- ============================================================== -->
+    <div id="view-dashboard" class="view">
+      <div class="dashboard-container">
+        <!-- Top Bar -->
+        <header class="dashboard-header glass-card">
+          <div class="header-left">
+            <div class="logo-small">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+            </div>
+            <span class="brand-name">SecureVault</span>
+          </div>
+          <div class="header-right">
+            <span class="user-greeting" id="user-greeting">Hello, User</span>
+            <button class="btn btn-outline btn-sm" id="logout-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign Out
+            </button>
+          </div>
+        </header>
+
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+          <!-- Profile Card -->
+          <div class="dash-card glass-card" id="profile-card">
+            <div class="dash-card-header">
+              <h2>Profile</h2>
+              <div class="status-badge online">Authenticated</div>
+            </div>
+            <div class="profile-info">
+              <div class="avatar" id="user-avatar">U</div>
+              <div class="profile-details">
+                <div class="detail-row">
+                  <span class="detail-label">Username</span>
+                  <span class="detail-value" id="detail-username">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Email</span>
+                  <span class="detail-value" id="detail-email">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Member Since</span>
+                  <span class="detail-value" id="detail-created">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Security Card -->
+          <div class="dash-card glass-card" id="security-card">
+            <div class="dash-card-header">
+              <h2>Security</h2>
+            </div>
+            <div class="security-items">
+              <div class="security-item">
+                <div class="security-item-icon check">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div class="security-item-info">
+                  <span class="security-item-title">Password</span>
+                  <span class="security-item-desc">bcrypt hashed (12 rounds)</span>
+                </div>
+              </div>
+              <div class="security-item">
+                <div class="security-item-icon check">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div class="security-item-info">
+                  <span class="security-item-title">Session</span>
+                  <span class="security-item-desc">HttpOnly + SameSite cookies</span>
+                </div>
+              </div>
+              <div class="security-item" id="twofa-status-item">
+                <div class="security-item-icon" id="twofa-status-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>
+                <div class="security-item-info">
+                  <span class="security-item-title">Two-Factor Auth</span>
+                  <span class="security-item-desc" id="twofa-status-text">Not enabled</span>
+                </div>
+                <button class="btn btn-sm btn-accent" id="twofa-toggle-btn">Enable</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Session Info Card -->
+          <div class="dash-card glass-card" id="session-card">
+            <div class="dash-card-header">
+              <h2>Session Info</h2>
+            </div>
+            <div class="session-info">
+              <div class="session-stat">
+                <div class="stat-value" id="session-timer">30:00</div>
+                <div class="stat-label">Session Expires In</div>
+              </div>
+              <div class="session-stat">
+                <div class="stat-value">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div class="stat-label">Encrypted Connection</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 2FA SETUP VIEW (from dashboard) -->
+    <!-- ============================================================== -->
+    <div id="view-2fa-setup" class="view">
+      <div class="auth-card glass-card setup-card">
+        <div class="card-header">
+          <div class="logo-icon twofa-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h1>Set Up 2FA</h1>
+          <p class="subtitle">Scan the QR code with your authenticator app</p>
+        </div>
+
+        <div class="qr-container" id="qr-container">
+          <div class="qr-placeholder">
+            <span class="btn-loader large-loader"></span>
+            <p>Generating QR code…</p>
+          </div>
+        </div>
+
+        <div class="secret-display" id="secret-display" style="display:none">
+          <p class="secret-label">Or enter this key manually:</p>
+          <code class="secret-code" id="secret-code"></code>
+        </div>
+
+        <form id="twofa-setup-form" novalidate>
+          <p class="setup-instruction">Enter the 6-digit code from your app to confirm:</p>
+          <div class="otp-input-group" id="otp-group-setup">
+            <input type="text" maxlength="1" class="otp-input" data-index="0" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="1" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="2" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="3" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="4" inputmode="numeric" />
+            <input type="text" maxlength="1" class="otp-input" data-index="5" inputmode="numeric" />
+          </div>
+          <button type="submit" class="btn btn-primary" id="confirm-2fa-btn">
+            <span class="btn-text">Confirm &amp; Enable</span>
+            <span class="btn-loader" style="display:none"></span>
+          </button>
+        </form>
+
+        <div class="card-footer">
+          <p><a href="#" id="go-back-dashboard">← Back to Dashboard</a></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/js/particles.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
