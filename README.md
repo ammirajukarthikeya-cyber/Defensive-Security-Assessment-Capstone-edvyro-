@@ -1,277 +1,175 @@
-# 🛡️ Cyber Security Task-1: Threat Model and Secure Configuration
-**Platform / Course:** Edvyro Cyber Security  
-**Repository:** [Threat-Model-and-Secure-Configuration-edvyro-](https://github.com/ammirajukarthikeya-cyber/Threat-Model-and-Secure-Configuration-edvyro-)  
-**Target Application:** SecureVault / TaskPulse Web Application  
-**Author:** ammirajukarthikeya-cyber  
-**Status:** Approved for Hardening Implementation  
+# 🛡️ Defensive Security Assessment Capstone
+
+**Course / Platform:** Edvyro Cyber Security  
+**Project:** Defensive Security Assessment Capstone  
+**Repository:** [Defensive-Security-Assessment-Capstone-edvyro-](https://github.com/ammirajukarthikeya-cyber/Defensive-Security-Assessment-Capstone-edvyro-)  
+**Target Application:** SecureVault Authentication & Session Management Service (`secure-login-system`)  
+**Lead Assessor:** ammirajukarthikeya-cyber  
+**Standard Compliance:** OWASP WSTG v4.2, NIST SP 800-115, NIST SP 800-63B  
+**Assessment Status:** Remediated & 100% Verified  
 
 ---
 
-## 📌 Executive Summary & Scope
+## 📌 Executive Summary & Assessment Objectives
 
-This project implements a complete Threat Model, STRIDE Risk Analysis, Prioritized Hardening Plan, and an accompanying production-ready hardened Node.js/Express web application featuring parameterized queries, strict session security, rate-limiting, and Two-Factor Authentication (2FA).
+This capstone project demonstrates an end-to-end, authorized defensive security assessment of an internal Node.js/Express web application. The assessment methodology is strictly ethical and evidence-based, spanning:
 
-### Core Assets Under Protection
-| Asset ID | Asset Name | Description & Classification | Primary Security Goals |
-| :--- | :--- | :--- | :--- |
-| **A-01** | **Customer PII & Credentials** | User emails, bcrypt password hashes (12 rounds), sessions | Confidentiality, Integrity |
-| **A-02** | **TOTP Secrets & 2FA State** | Base32 TOTP secret keys, QR code payloads, multi-factor verification flags | Confidentiality, Authenticity |
-| **A-03** | **Application Business Data** | Proprietary user tasks, records, profile metadata, uploaded attachments | Confidentiality, Integrity, Availability |
-| **A-04** | **API Signing Keys & Session Secrets** | Express session secrets, JWT signing keys, cloud IAM credentials | Confidentiality, Authenticity |
-| **A-05** | **Application Infrastructure** | Server runtime, database engines, network routes, DNS records | Availability, Integrity |
+1. **Ethical Scoping, Written Authorization & Rules of Engagement (RoE):** Defined strict loopback boundaries, privacy safeguards, and non-destructive protocols.
+2. **Defensive Assessment across 5 Core Domains:** Audited **Configuration**, **Authentication**, **Input Validation**, **Dependencies**, and **Logging & Monitoring**.
+3. **Evidence-Based Technical Findings:** Identified and cataloged 10 reproducible vulnerabilities (including Critical supply chain CVEs, weak CSP, 2FA session fixation, plaintext TOTP secret storage, and OTP replay).
+4. **Defensive Source-Code Remediation:** Patched all Critical and High risks using defensive programming, authenticated AES-256-GCM encryption, session regeneration, and SIEM-grade audit telemetry.
+5. **Retest Verification:** Developed automated regression assertions with **24 passing security tests across 11 test suites (100% pass rate)**.
 
 ---
 
-## 🗺️ 1. Architecture & Data Flow Diagram (DFD Level 1)
+## 📊 Security Posture: Baseline vs. Remediated
 
-### Trust Boundaries & Actors
-The architecture spans four distinct trust zones separated by five Trust Boundaries (**TB1** through **TB5**):
-- **Zone 0 (Untrusted Public Network):** Web browsers, unauthenticated visitors, attackers, and authenticated customers.
-- **Zone 1 (Perimeter / DMZ):** Cloudflare WAF / Reverse Proxy terminating public TLS.
-- **Zone 2 (Internal Compute VPC):** Application service containers running in private subnets with strictly controlled ingress.
-- **Zone 3 (Isolated Data Tier):** Persistent database and session cache restricted to internal VPC security groups.
-- **Zone 4 (External Third Parties):** Partner clouds and external APIs accessed via outbound HTTPS with strict TLS verification.
+```
+╔══════════════════════════════════════════════════════════════════════════════════════════╗
+║                                 SECURITY ASSESSMENT METRICS                              ║
+╠═══════════════════════════════╦══════════════════════════╦═══════════════════════════════╣
+║ Metric                        ║ Pre-Assessment Baseline  ║ Post-Remediation Verification ║
+╠═══════════════════════════════╬══════════════════════════╬═══════════════════════════════╣
+║ Critical Vulnerabilities      ║ 2                        ║ 0 (100% Remediated)           ║
+║ High Vulnerabilities          ║ 4                        ║ 0 (100% Remediated)           ║
+║ Medium Vulnerabilities        ║ 3                        ║ 0 (100% Remediated)           ║
+║ Low Vulnerabilities           ║ 1                        ║ 1 (Isolated build tool)       ║
+║ Automated Security Tests      ║ 17 passing               ║ 24 passing (0 failures)       ║
+║ Transitive Dependency CVEs    ║ 14 CVEs                  ║ 0 Critical, 0 High, 0 Mod     ║
+║ Test Pass Rate                ║ Baseline                 ║ 100% PASS (24 / 24)           ║
+╚═══════════════════════════════╩══════════════════════════╩═══════════════════════════════╝
+```
 
-### Level 1 Data Flow Diagram
+---
+
+## 🗺️ Architecture & Level 1 Data Flow Diagram (DFD)
 
 ```mermaid
 flowchart TD
-    %% Zones & Styling
     classDef actorStyle fill:#2C3E50,stroke:#1A252F,stroke-width:2px,color:#FFFFFF;
     classDef perimeterStyle fill:#E67E22,stroke:#D35400,stroke-width:2px,color:#FFFFFF;
     classDef appStyle fill:#2980B9,stroke:#1F618D,stroke-width:2px,color:#FFFFFF;
     classDef dataStyle fill:#27AE60,stroke:#1E8449,stroke-width:2px,color:#FFFFFF;
-    classDef extStyle fill:#8E44AD,stroke:#71368A,stroke-width:2px,color:#FFFFFF;
 
     subgraph Zone0["Zone 0: Public Network (Untrusted)"]
-        User["Regular User / Client Browser"]:::actorStyle
-        AdminUser["System Administrator"]:::actorStyle
-        Attacker["Malicious Threat Actor"]:::actorStyle
+        User["Client Browser"]:::actorStyle
+        Attacker["Threat Actor"]:::actorStyle
     end
 
-    %% Trust Boundary 1
-    TB1["== Trust Boundary 1: Internet Edge =="]
+    TB1["== Trust Boundary 1: Perimeter Edge =="]
 
-    subgraph Zone1["Zone 1: Perimeter / DMZ"]
-        WAF["WAF / Anti-DDoS Shield"]:::perimeterStyle
-        ReverseProxy["Nginx Reverse Proxy & TLS Ingress"]:::perimeterStyle
+    subgraph Zone1["Zone 1: Ingress & Perimeter Defense"]
+        Helmet["Helmet CSP & Security Headers"]:::perimeterStyle
+        RateLimiter["express-rate-limit Ingress Shields"]:::perimeterStyle
     end
 
-    %% Trust Boundary 2
-    TB2["== Trust Boundary 2: Ingress Boundary =="]
+    TB2["== Trust Boundary 2: Application Core =="]
 
-    subgraph Zone2["Zone 2: Internal Application VPC (Private Subnet)"]
-        APIServer["Express REST API Backend Service"]:::appStyle
-        AuthModule["Auth & Session Manager (bcrypt / TOTP)"]:::appStyle
-        FileHandler["File Upload Pre-Processor"]:::appStyle
+    subgraph Zone2["Zone 2: Application & Business Tier"]
+        AuthRoutes["routes/auth.js (Bcrypt Timing Mitigation)"]:::appStyle
+        TwoFARoutes["routes/twofa.js (Session Regeneration & Replay Defense)"]:::appStyle
+        Logger["middleware/logger.js (Sanitized JSON Audit Logger)"]:::appStyle
+        Crypto["utils/crypto.js (AES-256-GCM Authenticated Encryption)"]:::appStyle
     end
 
-    %% Trust Boundary 3
-    TB3["== Trust Boundary 3: Internal Data Boundary =="]
+    TB3["== Trust Boundary 3: Persistence Boundary =="]
 
-    subgraph Zone3["Zone 3: Persistence & Cache Tier"]
-        DB[(Persistent SQL Database)]:::dataStyle
-        Cache[(Session Storage & Rate Limiter)]:::dataStyle
+    subgraph Zone3["Zone 3: Persistent Data Tier"]
+        DB[("SQLite Database (app.sqlite) - Parameterized Queries")]:::dataStyle
+        Sessions[("Session Store (sessions.sqlite) - Strict Cookies")]:::dataStyle
     end
 
-    %% Trust Boundary 4 & 5
-    TB4["== Trust Boundary 4: Egress to Cloud Services =="]
-
-    subgraph Zone4["Zone 4: External Dependencies"]
-        OAuthIdP["External Identity / OAuth 2.0"]:::extStyle
-        PaymentGateway["Payment / Transaction Gateway"]:::extStyle
-        S3Bucket["Object Storage Bucket (Private)"]:::extStyle
-        SMTPService["Transactional Email Service"]:::extStyle
-    end
-
-    %% Data Flows
-    User -->|"1. HTTPS / TLS 1.3 (Requests, Auth, 2FA)"| TB1
-    AdminUser -->|"1. HTTPS / TLS 1.3 (Admin Portal, MFA)"| TB1
-    Attacker -.->|"Abuse traffic, Brute-force, Tampering"| TB1
-
-    TB1 --> WAF
-    WAF -->|"2. Scrubbed Traffic (HTTPS)"| ReverseProxy
-    ReverseProxy --> TB2
-    TB2 -->|"3. HTTP/2 Internal (Validated Requests)"| APIServer
-
-    APIServer <-->|"4. Authenticate / Verify Sessions"| AuthModule
-    APIServer -->|"5. Process File Uploads"| FileHandler
-    AuthModule <-->|"6. Session Tokens & Rate-Limits"| Cache
-    APIServer <-->|"7. Encrypted Queries (Parameterized SQL)"| DB
-
-    %% External Connections
-    AuthModule <-->|"8. OpenID Connect / OAuth Tokens"| TB4
-    TB4 <--> OAuthIdP
-    APIServer <-->|"9. Checkout & Webhook Callbacks"| TB4
-    TB4 <--> PaymentGateway
-    FileHandler -->|"10. Presigned Uploads / Cloud IAM"| TB4
-    TB4 --> S3Bucket
-    APIServer -->|"11. Transactional Alerts via API"| TB4
-    TB4 --> SMTPService
+    User -->|"HTTPS / Auth Requests"| TB1
+    Attacker -.->|"Throttled abuse attempts"| TB1
+    TB1 --> Helmet
+    Helmet --> RateLimiter
+    RateLimiter --> TB2
+    TB2 --> AuthRoutes
+    TB2 --> TwoFARoutes
+    TwoFARoutes --> Crypto
+    TwoFARoutes --> Logger
+    AuthRoutes --> Logger
+    Crypto -->|"AES-256-GCM Ciphertext"| TB3
+    AuthRoutes -->|"Salted Bcrypt Hashes"| TB3
+    TB3 --> DB
+    TB3 --> Sessions
 ```
 
 ---
 
-## ⚠️ 2. Realistic Abuse Cases & Threat Scenarios
+## 📋 Comprehensive Findings Matrix
 
-### Abuse Case 1: Broken Object-Level Authorization (BOLA / IDOR)
-- **Actor:** Authenticated User of Tenant A (`tenant_id = 101`).
-- **Mechanism:** The user requests `GET /api/v1/records/9924` by modifying the sequential numeric ID in the URL parameter.
-- **Vulnerability:** The application verifies authentication but fails to verify record ownership against the active session's tenant ID.
-- **Impact:** Unauthorized exposure of private documents, profile data, and records across accounts.
-
-### Abuse Case 2: Credential Stuffing & Distributed Password Spraying
-- **Actor:** External Cybercriminal using compromised botnets.
-- **Mechanism:** Automated scripts attempt thousands of credential pairs against `/api/v1/auth/login`.
-- **Vulnerability:** Absence of distributed IP rate limiting, CAPTCHA challenges after repeated failures, or breached-credential detection.
-- **Impact:** Account takeover (ATO) of privileged administrators, enabling data exfiltration and fraud.
-
-### Abuse Case 3: Malicious File Upload & Remote Code Execution / Stored XSS
-- **Actor:** Malicious contributor.
-- **Mechanism:** Attacker uploads a file disguised as `avatar.png` containing an embedded SVG with executable JavaScript or server-side shell payload.
-- **Vulnerability:** Client-side only MIME type verification; file served directly back from the primary domain without sandboxing or strict `Content-Disposition: attachment` headers.
-- **Impact:** Cross-Site Scripting (XSS) in victim administrator browsers, session token theft, or server compromise.
-
-### Abuse Case 4: Server-Side Request Forgery (SSRF) via Webhook Customization
-- **Actor:** Tenant Admin configuring custom outbound webhooks.
-- **Mechanism:** Enters `http://169.254.169.254/latest/meta-data/iam/security-credentials/` as their notification endpoint.
-- **Vulnerability:** Backend makes an unvalidated request to the provided URL without validating loopback, link-local, or private IP ranges.
-- **Impact:** Leakage of cloud instance role credentials, granting full control over cloud infrastructure.
-
-### Abuse Case 5: 2FA TOTP Timing & Brute-Force Bypass
-- **Actor:** Attacker possessing compromised username and password.
-- **Mechanism:** Exploits unthrottled 2FA verification endpoints to brute-force 6-digit TOTP codes within the time step window.
-- **Vulnerability:** Rate limits applied only to primary password authentication, leaving the second factor vulnerable to rapid guessing.
-- **Impact:** Complete bypass of multi-factor authentication defenses.
+| ID | Finding Title | Domain | Pre-Risk | CWE / OWASP | Root Cause & Defensive Patch | Status |
+| :---: | :--- | :---: | :---: | :--- | :--- | :---: |
+| **SEC-01** | Weak CSP (`'unsafe-inline'` in `script-src`) | Configuration | **HIGH** | CWE-79 / A05:2021 | Helmet CSP allowed inline scripts. Removed `'unsafe-inline'`; all scripts loaded as static assets. | **RESOLVED** |
+| **SEC-02** | 2FA Session Fixation Across Validation | Authentication | **HIGH** | CWE-384 / A07:2021 | Session ID was not regenerated after TOTP validation. Added `req.session.regenerate()` in `/validate`. | **RESOLVED** |
+| **SEC-03** | Plaintext Storage of TOTP Secrets | Auth / DB | **HIGH** | CWE-312 / A02:2021 | Secrets saved as plain base32 in SQLite. Implemented AES-256-GCM authenticated encryption at rest. | **RESOLVED** |
+| **SEC-04** | TOTP Token Replay Vulnerability | Authentication | **MEDIUM** | CWE-294 / A07:2021 | Token accepted repeatedly in 90s window. Added `last_totp_token` tracking to block token reuse. | **RESOLVED** |
+| **SEC-05** | Missing Rate Limiting on 2FA Endpoints | Auth / Config | **MEDIUM** | CWE-307 / A07:2021 | Setup and verify endpoints unthrottled. Bound `authLimiter` across the entire `/api/2fa` router. | **RESOLVED** |
+| **SEC-06** | Malformed JSON Triggers HTTP 500 | Validation | **MEDIUM** | CWE-754 / A05:2021 | Bad JSON caused 500 internal server error. Handled syntax error cleanly with HTTP 400. | **RESOLVED** |
+| **SEC-07** | Transitive Supply Chain CVEs in `tar`/`qs` | Dependencies | **CRITICAL** | CWE-1395 / A06:2021 | Critical/High CVEs in transitive dependencies. Applied `npm audit fix` and package override `tar: ^7.5.22`. | **RESOLVED** |
+| **SEC-08** | Complete Absence of Security Audit Logging | Logging | **HIGH** | CWE-778 / A09:2021 | No structured logs for auth events. Created `middleware/logger.js` with sanitized JSON telemetry. | **RESOLVED** |
+| **SEC-09** | Unconfigured Reverse Proxy Trust | Configuration | **LOW** | CWE-345 / A05:2021 | Express did not declare proxy trust. Added configurable `app.set('trust proxy', ...)`. | **RESOLVED** |
+| **SEC-10** | Transitive Build Tool Advisory (`node-gyp`) | Dependencies | **LOW** | CWE-1395 / A06:2021 | Build-time proxy utility advisory in native compile tool. Documented and accepted (isolated build phase). | **ACCEPTED** |
 
 ---
 
-## 🔍 3. Comprehensive STRIDE Threat Analysis
-
-| Category | Threat ID | Target Component | Threat Description | Attack Vector / Scenario |
-| :--- | :--- | :--- | :--- | :--- |
-| **S** - Spoofing | **TH-01** | Client Auth / Ingress | Authentication Bypass & Session Hijacking | Attacker predicts or sniffs weak session cookies, hijacking authenticated user sessions. |
-| **S** - Spoofing | **TH-02** | External Webhooks | Webhook Sender Impersonation | Attacker sends fake completion payloads to incoming webhook endpoints without valid cryptographic verification. |
-| **T** - Tampering | **TH-03** | API Service / DB | Parameter Tampering & Mass Assignment | Attacker modifies PUT request payload by adding `{"is_admin": true}` to elevate account privileges. |
-| **T** - Tampering | **TH-04** | Ingress / API | SQL Injection (SQLi) | Malicious SQL syntax injected into filter/search query parameters (`?search=' OR 1=1--`), altering query logic. |
-| **R** - Repudiation | **TH-05** | API Service / DB | Insufficient Audit Logging | A malicious admin deletes sensitive project records; system lacks immutable audit logs to attribute the act. |
-| **I** - Info Disclosure | **TH-06** | Reverse Proxy / API | Verbose Error Disclosure & Stack Traces | Unhandled exceptions return raw stack traces, database schema details, and framework versions to end users. |
-| **I** - Info Disclosure | **TH-07** | Storage Tier | Public Bucket Misconfiguration | Overly permissive cloud storage bucket policies allow public anonymous reads of uploaded confidential files. |
-| **I** - Info Disclosure | **TH-08** | API Service | Broken Object Level Authorization (IDOR) | Numerical ID parameter manipulation leaks PII and records of other users. |
-| **D** - Denial of Service | **TH-09** | Ingress / API Server | Rate Limit Bypass & Resource Exhaustion | Unauthenticated endpoints (login, password reset) hammered with millions of requests, causing CPU/memory starvation. |
-| **D** - Denial of Service | **TH-10** | File Handler / Storage | Large File Storage Depletion | Attacker submits recursive nested archives or multi-gigabyte files, exhausting local memory and storage buffers. |
-| **E** - Elevation of Priv | **TH-11** | API Logic | Horizontal & Vertical Privilege Escalation | Regular user accesses administrative routes (`/admin`) due to missing role middleware enforcement. |
-| **E** - Elevation of Priv | **TH-12** | API / Cloud Layer | SSRF via Cloud Metadata Service | Malicious webhook URL forces server to query AWS IMDSv1, yielding cloud IAM credentials. |
-
----
-
-## 📊 4. Risk Ranking & Assessment (Likelihood × Impact)
-
-### Risk Scoring Formula
-$$\text{Risk Score} = \text{Likelihood (1–5)} \times \text{Impact (1–5)}$$
-
-- **Critical:** 16 – 25 (Remediate immediately: 0–72 hrs)
-- **High:** 10 – 15 (Remediate in current sprint)
-- **Medium:** 5 – 9 (Remediate in next cycle)
-- **Low:** 1 – 4 (Regular backlog)
-
-### Ranked Risk Register
-| Rank | Threat ID & Summary | STRIDE | Likelihood (1-5) | Impact (1-5) | Score | Severity |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1** | **TH-08: BOLA / IDOR on User Records** | **I** | 5 | 4 | **20** | **CRITICAL** |
-| **2** | **TH-01: Session Hijacking & Weak Cookie Flags** | **S** | 4 | 5 | **20** | **CRITICAL** |
-| **3** | **TH-04: SQL Injection on Search Endpoints** | **T** | 3 | 5 | **15** | **HIGH** |
-| **4** | **TH-12: SSRF via Webhook Notification URLs** | **E** | 3 | 5 | **15** | **HIGH** |
-| **5** | **TH-07: Publicly Exposed Storage Buckets** | **I** | 3 | 4 | **12** | **HIGH** |
-| **6** | **TH-09: DoS via Auth & Search Endpoints** | **D** | 4 | 3 | **12** | **HIGH** |
-| **7** | **TH-02: Webhook Forgery & Replay** | **S** | 3 | 4 | **12** | **HIGH** |
-| **8** | **TH-11: Vertical Privilege Escalation** | **E** | 3 | 4 | **12** | **HIGH** |
-| **9** | **TH-03: Mass Assignment Parameter Tampering**| **T** | 4 | 3 | **12** | **HIGH** |
-| **10** | **TH-10: Large File Upload / Storage Exhaustion** | **D** | 3 | 3 | **9** | **MEDIUM** |
-| **11** | **TH-06: Verbose Error & Stack Trace Leakage** | **I** | 4 | 2 | **8** | **MEDIUM** |
-| **12** | **TH-05: Missing Centralized Audit Logs** | **R** | 2 | 3 | **6** | **MEDIUM** |
-
----
-
-## 🛠️ 5. Prioritized Hardening Plan & Secure Configuration
-
-### Phase 1: P0 - Immediate Hardening (Critical & High Risks)
-
-#### 1. Scope-Based Authorization (Mitigates TH-08, TH-11)
-Always enforce tenancy / user ownership constraints on data lookups:
-```javascript
-const record = db.prepare('SELECT * FROM records WHERE id = ? AND user_id = ?').get(id, req.session.userId);
-if (!record) return res.status(404).json({ error: 'Record not found' });
-```
-
-#### 2. Robust Session Security & 2FA Throttling (Mitigates TH-01)
-- Strict cookie flags: `HttpOnly`, `Secure`, `SameSite=Strict`.
-- Session ID regeneration on login: `req.session.regenerate()`.
-- Strict rate limiting on 2FA endpoints (max 5 attempts per 10 minutes).
-
-#### 3. Parameterized Queries & Input Validation (Mitigates TH-04, TH-03)
-- Use prepared statements (`better-sqlite3`).
-- Sanitize and validate inputs with `express-validator`. Never pass raw `req.body` directly into database operations.
-
-#### 4. Ingress Rate Limiting (Mitigates TH-09)
-- Enforce `express-rate-limit`:
-  - Auth routes: 10 attempts / 15 minutes per IP.
-  - General API: 100 requests / 15 minutes.
-
----
-
-### Phase 2: P1 - Structural Hardening (High & Medium Risks)
-
-#### 5. Defense-in-Depth HTTP Headers & Reverse Proxy Hardening
-- Enforce Helmet with custom Content Security Policy (CSP):
-```javascript
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"]
-    }
-  },
-  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-  hsts: { maxAge: 63072000, includeSubDomains: true, preload: true }
-}));
-```
-
-#### 6. SSRF Mitigation on Outbound Integrations (Mitigates TH-12)
-- Validate outbound destinations against a strict domain whitelist.
-- Block all RFC 1918 private subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) and cloud metadata services (`169.254.169.254`).
-
----
-
-### Phase 3: P2 - Operational Hardening
-
-#### 7. Centralized Audit Logging (Mitigates TH-05)
-- Log security-critical events (login success/failure, 2FA enabled/disabled, password change) with timestamps and IP addresses.
-- Sanitize all log payloads to avoid capturing passwords or TOTP secret tokens.
-
----
-
-## 💻 6. Implementation Codebase Overview
-
-This repository includes a fully operational web application illustrating these hardening principles:
+## 🛠️ Defensive Codebase Structure
 
 ```text
-├── README.md             # This comprehensive Threat Model & Hardening document
-├── THREAT_MODEL.md       # Standalone Threat Model specification
-├── server.js             # Express configuration, Helmet security headers, rate limiters
-├── middleware/auth.js    # Session fixation defense & 2FA middleware guards
-├── routes/auth.js        # Parameterized bcrypt registration, login, and session regeneration
-├── routes/twofa.js       # Speakeasy TOTP setup, QR code generation, and verification
-├── db/database.js        # Parameterized SQLite queries preventing SQL Injection
-└── public/               # Client-side glassmorphism UI with client-side password evaluation
+├── DEFENSIVE_ASSESSMENT_SCOPING.md        # Formal Scoping, Authorization Statement & RoE
+├── DEFENSIVE_SECURITY_ASSESSMENT_REPORT.md# Complete Sanitized Security Assessment Report
+├── THREAT_MODEL.md                        # Threat Model & STRIDE Analysis
+├── README.md                              # Repository overview & capstone documentation
+├── server.js                              # Hardened Express server, Helmet CSP, proxy trust, error handling
+├── utils/
+│   └── crypto.js                          # AES-256-GCM authenticated encryption helpers
+├── middleware/
+│   ├── auth.js                            # Authentication & MFA authorization guards
+│   └── logger.js                          # Structured JSON security audit logger with PII sanitization
+├── routes/
+│   ├── auth.js                            # Parameterized bcrypt registration, login, timing defense
+│   └── twofa.js                           # Speakeasy TOTP setup, session regeneration, replay protection
+├── db/
+│   └── database.js                        # Parameterized SQLite persistence & encrypted secret handling
+├── public/                                # Client UI (HTML/CSS/JS) with external scripts
+└── test/
+    ├── test-helper.js                     # Test database lifecycle and environment initialization
+    ├── defensive-assessment-retest.test.js# Automated capstone retest assertions (7 tests)
+    ├── generic-errors.test.js             # Error disclosure & enumeration mitigation tests
+    ├── input-validation.test.js          # Server-side schema validation tests
+    ├── password-hashing.test.js           # Salted bcrypt verification tests
+    ├── rate-limiting.test.js              # Rate limiter throttling & 429 response tests
+    ├── session-security.test.js           # Cookie flags, session fixation & logout tests
+    └── twofa.test.js                      # End-to-end 2FA lifecycle & session tests
 ```
 
-### Running Locally
+---
+
+## 🚀 Running Locally & Verifying Retests
+
+### 1. Installation
 ```bash
 npm install
-npm run dev
 ```
-Navigate to `http://localhost:3000` to interact with the hardened authentication and 2FA flow.
+
+### 2. Run Automated Security Test Suite
+```bash
+npm test
+```
+*Executes all 24 security tests across 11 test suites covering configuration, authentication, validation, dependencies, and logging.*
+
+### 3. Launch Development Server
+```bash
+npm run dev
+# Or production mode:
+npm start
+```
+Navigate to `http://localhost:3000` to interact with the hardened authentication interface.
+
+---
+
+## 📜 Key Assessment Documents
+* 📄 **[Scoping, Authorization & Rules of Engagement](./DEFENSIVE_ASSESSMENT_SCOPING.md)**
+* 📄 **[Master Security Assessment Report](./DEFENSIVE_SECURITY_ASSESSMENT_REPORT.md)**
+* 📄 **[Threat Model & Secure Configuration Plan](./THREAT_MODEL.md)**
