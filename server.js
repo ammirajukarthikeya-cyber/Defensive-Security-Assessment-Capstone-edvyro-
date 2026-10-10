@@ -8,9 +8,16 @@ const path = require('path');
 const { initDatabase } = require('./db/database');
 const authRoutes = require('./routes/auth');
 const twofaRoutes = require('./routes/twofa');
+const { logSecurityEvent } = require('./middleware/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ---------------------------------------------------------------------------
+// Reverse Proxy Trust Configuration
+// Enables secure extraction of remote client IPs behind load balancers/proxies
+// ---------------------------------------------------------------------------
+app.set('trust proxy', process.env.TRUST_PROXY ? parseInt(process.env.TRUST_PROXY, 10) : 1);
 
 // ---------------------------------------------------------------------------
 // Database Initialization
@@ -20,13 +27,14 @@ initDatabase();
 // ---------------------------------------------------------------------------
 // Security Headers (Helmet)
 // Mitigates Clickjacking, Cross-Site Scripting, MIME-sniffing, etc.
+// Hardened CSP: Removed 'unsafe-inline' from scriptSrc to prevent DOM/XSS injection.
 // ---------------------------------------------------------------------------
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:'],
@@ -47,6 +55,15 @@ const generalLimiter = rateLimit({
   windowMs: generalWindowMs,
   max: generalMax,
   skip: (_req) => process.env.NODE_ENV === 'test' && process.env.TEST_ENABLE_RATE_LIMIT !== 'true',
+  handler: (req, res, _next, options) => {
+    logSecurityEvent({
+      event: 'SECURITY_RATE_LIMIT_EXCEEDED',
+      level: 'WARN',
+      req,
+      details: { limiter: 'general', windowMs: generalWindowMs, max: generalMax },
+    });
+    res.status(options.statusCode).json(options.message);
+  },
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -59,6 +76,15 @@ const authLimiter = rateLimit({
   windowMs: authWindowMs,
   max: authMax,
   skip: (_req) => process.env.NODE_ENV === 'test' && process.env.TEST_ENABLE_RATE_LIMIT !== 'true',
+  handler: (req, res, _next, options) => {
+    logSecurityEvent({
+      event: 'SECURITY_RATE_LIMIT_EXCEEDED',
+      level: 'WARN',
+      req,
+      details: { limiter: 'auth', windowMs: authWindowMs, max: authMax, path: req.originalUrl },
+    });
+    res.status(options.statusCode).json(options.message);
+  },
   message: { error: 'Too many login attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -119,10 +145,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------------------
 // API Routes
+// Hardened Defense: Both Auth and 2FA endpoints are protected under authLimiter
 // ---------------------------------------------------------------------------
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/2fa/validate', authLimiter); // Protect 2FA challenge against brute-force guessing
-app.use('/api/2fa', twofaRoutes);
+app.use('/api/2fa', authLimiter, twofaRoutes);
 
 // ---------------------------------------------------------------------------
 // SPA Fallback (Single Page Application routing)
@@ -132,10 +158,25 @@ app.get('*', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Error Handling Middleware
+// Error Handling Middleware (Handles Malformed JSON cleanly and logs errors)
 // ---------------------------------------------------------------------------
-app.use((err, _req, res, _next) => {
-  console.error('Unhandled server error:', err.message);
+app.use((err, req, res, _next) => {
+  if (err instanceof SyntaxError && (err.status === 400 || err.statusCode === 400)) {
+    logSecurityEvent({
+      event: 'SECURITY_MALFORMED_INPUT',
+      level: 'WARN',
+      req,
+      details: { error: 'malformed_json_body' },
+    });
+    return res.status(400).json({ error: 'Malformed JSON payload.' });
+  }
+
+  logSecurityEvent({
+    event: 'SECURITY_SYSTEM_ERROR',
+    level: 'ERROR',
+    req,
+    details: { error: err.message },
+  });
   res.status(500).json({ error: 'Internal server error.' });
 });
 

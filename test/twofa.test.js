@@ -103,11 +103,12 @@ describe('Defensive Control 6: Two-Factor Authentication (TOTP)', () => {
       .expect(200);
 
     assert.strictEqual(validateRes.body.user.username, 'mfa_user');
+    const postMfaCookie = validateRes.headers['set-cookie'] || mfaPendingCookie;
 
-    // 9. Verify protected route is now accessible (200 OK)
+    // 9. Verify protected route is now accessible (200 OK) using post-2FA session
     const authedRes = await request(app)
       .get('/api/auth/me')
-      .set('Cookie', mfaPendingCookie)
+      .set('Cookie', postMfaCookie)
       .expect(200);
 
     assert.strictEqual(authedRes.body.user.username, 'mfa_user');

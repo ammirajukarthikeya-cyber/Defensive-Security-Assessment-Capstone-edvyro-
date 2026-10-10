@@ -7,15 +7,31 @@ const {
   saveTotpSecret,
   enableTotp,
   disableTotp,
+  updateLastTotpToken,
 } = require('../db/database');
 const { requireAuth, requireFullAuth } = require('../middleware/auth');
+const { logSecurityEvent } = require('../middleware/logger');
 
 const router = express.Router();
+
+const tokenValidation = [
+  body('token')
+    .trim()
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Token must be a 6-digit number.')
+    .isNumeric()
+    .withMessage('Token must be a 6-digit number.'),
+];
 
 // ---------------------------------------------------------------------------
 // POST /api/2fa/setup  –  Generate a TOTP secret & QR code
 // ---------------------------------------------------------------------------
 router.post('/setup', requireAuth, async (req, res) => {
+  // Disallow access if a 2FA challenge is currently pending completion
+  if (req.session.requires2FA) {
+    return res.status(403).json({ error: 'Two-factor authentication required.' });
+  }
+
   try {
     const user = findUserById(req.session.userId);
     if (!user) {
@@ -32,11 +48,19 @@ router.post('/setup', requireAuth, async (req, res) => {
       length: 20,
     });
 
-    // Store the base32 secret (not yet enabled)
+    // Store encrypted secret in DB
     saveTotpSecret(user.id, secret.base32);
 
     // Generate QR code as data-URL
     const qrDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    logSecurityEvent({
+      event: 'AUTH_2FA_SETUP_INITIATED',
+      req,
+      userId: user.id,
+      username: user.username,
+      details: { step: 'qr_generated' },
+    });
 
     res.json({
       message: 'Scan the QR code with your authenticator app, then verify with a token.',
@@ -44,7 +68,12 @@ router.post('/setup', requireAuth, async (req, res) => {
       qrCode: qrDataUrl,
     });
   } catch (err) {
-    console.error('2FA setup error:', err);
+    logSecurityEvent({
+      event: 'SECURITY_SYSTEM_ERROR',
+      level: 'ERROR',
+      req,
+      details: { action: '2fa_setup', message: err.message },
+    });
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -55,8 +84,12 @@ router.post('/setup', requireAuth, async (req, res) => {
 router.post(
   '/verify',
   requireAuth,
-  [body('token').trim().isLength({ min: 6, max: 6 }).isNumeric().withMessage('Token must be a 6-digit number.')],
+  tokenValidation,
   (req, res) => {
+    if (req.session.requires2FA) {
+      return res.status(403).json({ error: 'Two-factor authentication required.' });
+    }
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ error: errors.array()[0].msg });
@@ -78,11 +111,26 @@ router.post(
     });
 
     if (!verified) {
+      logSecurityEvent({
+        event: 'AUTH_2FA_VERIFICATION_FAILED',
+        level: 'WARN',
+        req,
+        userId: user.id,
+        username: user.username,
+      });
       return res.status(401).json({ error: 'Invalid token. Please try again.' });
     }
 
     enableTotp(user.id);
     req.session.requires2FA = false;
+
+    logSecurityEvent({
+      event: 'AUTH_2FA_ENABLED',
+      req,
+      userId: user.id,
+      username: user.username,
+    });
+
     res.json({ message: 'Two-factor authentication enabled successfully!' });
   }
 );
@@ -93,7 +141,7 @@ router.post(
 router.post(
   '/validate',
   requireAuth,
-  [body('token').trim().isLength({ min: 6, max: 6 }).isNumeric().withMessage('Token must be a 6-digit number.')],
+  tokenValidation,
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -109,6 +157,19 @@ router.post(
       return res.status(400).json({ error: '2FA is not configured for this user.' });
     }
 
+    // Defensive Token Replay Prevention
+    if (user.last_totp_token === req.body.token) {
+      logSecurityEvent({
+        event: 'AUTH_2FA_REPLAY_ATTEMPT',
+        level: 'WARN',
+        req,
+        userId: user.id,
+        username: user.username,
+        details: { endpoint: '/api/2fa/validate' },
+      });
+      return res.status(401).json({ error: 'Invalid or previously used 2FA token.' });
+    }
+
     const verified = speakeasy.totp.verify({
       secret: user.totp_secret,
       encoding: 'base32',
@@ -117,17 +178,55 @@ router.post(
     });
 
     if (!verified) {
+      logSecurityEvent({
+        event: 'AUTH_2FA_CHALLENGE_FAILED',
+        level: 'WARN',
+        req,
+        userId: user.id,
+        username: user.username,
+      });
       return res.status(401).json({ error: 'Invalid 2FA token.' });
     }
 
-    req.session.requires2FA = false;
-    req.session.save((err) => {
+    // Mark token as consumed to prevent replay within validity window
+    updateLastTotpToken(user.id, req.body.token);
+
+    // Prevent Session Fixation: Regenerate session ID upon successful 2FA step completion
+    const userId = user.id;
+    const username = user.username;
+    const email = user.email;
+
+    req.session.regenerate((err) => {
       if (err) {
-        return res.status(500).json({ error: 'Session save error.' });
+        logSecurityEvent({
+          event: 'SECURITY_SYSTEM_ERROR',
+          level: 'ERROR',
+          req,
+          details: { action: 'session_regenerate_2fa', message: err.message },
+        });
+        return res.status(500).json({ error: 'Session error.' });
       }
-      res.json({
-        message: 'Two-factor authentication verified!',
-        user: { id: user.id, username: user.username, email: user.email },
+
+      req.session.userId = userId;
+      req.session.username = username;
+      req.session.requires2FA = false;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          return res.status(500).json({ error: 'Session save error.' });
+        }
+
+        logSecurityEvent({
+          event: 'AUTH_2FA_VALIDATED',
+          req,
+          userId,
+          username,
+        });
+
+        res.json({
+          message: 'Two-factor authentication verified!',
+          user: { id: userId, username, email },
+        });
       });
     });
   }
@@ -139,7 +238,7 @@ router.post(
 router.post(
   '/disable',
   requireFullAuth,
-  [body('token').trim().isLength({ min: 6, max: 6 }).isNumeric().withMessage('Token must be a 6-digit number.')],
+  tokenValidation,
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -159,10 +258,25 @@ router.post(
     });
 
     if (!verified) {
+      logSecurityEvent({
+        event: 'AUTH_2FA_DISABLE_FAILED',
+        level: 'WARN',
+        req,
+        userId: user.id,
+        username: user.username,
+      });
       return res.status(401).json({ error: 'Invalid token. Cannot disable 2FA.' });
     }
 
     disableTotp(user.id);
+
+    logSecurityEvent({
+      event: 'AUTH_2FA_DISABLED',
+      req,
+      userId: user.id,
+      username: user.username,
+    });
+
     res.json({ message: 'Two-factor authentication disabled.' });
   }
 );

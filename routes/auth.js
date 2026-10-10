@@ -8,6 +8,7 @@ const {
   findUserById,
 } = require('../db/database');
 const { requireFullAuth } = require('../middleware/auth');
+const { logSecurityEvent } = require('../middleware/logger');
 
 const router = express.Router();
 
@@ -79,9 +80,23 @@ router.post('/register', registerValidation, async (req, res) => {
   try {
     // Check for existing account collisions
     if (findUserByUsername(username)) {
+      logSecurityEvent({
+        event: 'AUTH_REGISTER_COLLISION',
+        level: 'WARN',
+        req,
+        username,
+        details: { reason: 'username_exists' },
+      });
       return res.status(409).json({ error: 'Username is already taken.' });
     }
     if (findUserByEmail(email)) {
+      logSecurityEvent({
+        event: 'AUTH_REGISTER_COLLISION',
+        level: 'WARN',
+        req,
+        username,
+        details: { reason: 'email_exists' },
+      });
       return res.status(409).json({ error: 'Email is already registered.' });
     }
 
@@ -95,6 +110,12 @@ router.post('/register', registerValidation, async (req, res) => {
     // Prevent Session Fixation: Regenerate session ID upon account creation
     req.session.regenerate((err) => {
       if (err) {
+        logSecurityEvent({
+          event: 'SECURITY_SYSTEM_ERROR',
+          level: 'ERROR',
+          req,
+          details: { action: 'session_regenerate_register', message: err.message },
+        });
         return res.status(500).json({ error: 'Session error.' });
       }
       req.session.userId = result.lastInsertRowid;
@@ -104,6 +125,14 @@ router.post('/register', registerValidation, async (req, res) => {
         if (saveErr) {
           return res.status(500).json({ error: 'Session save error.' });
         }
+
+        logSecurityEvent({
+          event: 'AUTH_REGISTER_SUCCESS',
+          req,
+          userId: result.lastInsertRowid,
+          username,
+        });
+
         res.status(201).json({
           message: 'Registration successful!',
           user: { id: result.lastInsertRowid, username, email },
@@ -111,7 +140,12 @@ router.post('/register', registerValidation, async (req, res) => {
       });
     });
   } catch (err) {
-    console.error('Registration error:', err);
+    logSecurityEvent({
+      event: 'SECURITY_SYSTEM_ERROR',
+      level: 'ERROR',
+      req,
+      details: { action: 'register', message: err.message },
+    });
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -140,12 +174,25 @@ router.post('/login', loginValidation, async (req, res) => {
 
     // Generic authentication failure response to prevent username enumeration
     if (!user || !match) {
+      logSecurityEvent({
+        event: 'AUTH_LOGIN_FAILURE',
+        level: 'WARN',
+        req,
+        username,
+        details: { reason: 'invalid_credentials' },
+      });
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
     // Prevent Session Fixation: Regenerate session ID upon successful login
     req.session.regenerate((err) => {
       if (err) {
+        logSecurityEvent({
+          event: 'SECURITY_SYSTEM_ERROR',
+          level: 'ERROR',
+          req,
+          details: { action: 'session_regenerate_login', message: err.message },
+        });
         return res.status(500).json({ error: 'Session error.' });
       }
 
@@ -158,6 +205,15 @@ router.post('/login', loginValidation, async (req, res) => {
           if (saveErr) {
             return res.status(500).json({ error: 'Session save error.' });
           }
+
+          logSecurityEvent({
+            event: 'AUTH_LOGIN_STEP1_SUCCESS',
+            req,
+            userId: user.id,
+            username: user.username,
+            details: { mfa_required: true },
+          });
+
           res.json({
             message: 'Two-factor authentication required.',
             requires2FA: true,
@@ -169,6 +225,15 @@ router.post('/login', loginValidation, async (req, res) => {
           if (saveErr) {
             return res.status(500).json({ error: 'Session save error.' });
           }
+
+          logSecurityEvent({
+            event: 'AUTH_LOGIN_SUCCESS',
+            req,
+            userId: user.id,
+            username: user.username,
+            details: { mfa_required: false },
+          });
+
           res.json({
             message: 'Login successful!',
             requires2FA: false,
@@ -178,7 +243,12 @@ router.post('/login', loginValidation, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
+    logSecurityEvent({
+      event: 'SECURITY_SYSTEM_ERROR',
+      level: 'ERROR',
+      req,
+      details: { action: 'login', message: err.message },
+    });
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -188,6 +258,8 @@ router.post('/login', loginValidation, async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post('/logout', (req, res) => {
   const cookieName = process.env.SESSION_COOKIE_NAME || 'sid';
+  const userId = req.session?.userId;
+  const username = req.session?.username;
 
   if (!req.session) {
     res.clearCookie(cookieName, { path: '/' });
@@ -196,8 +268,24 @@ router.post('/logout', (req, res) => {
 
   req.session.destroy((err) => {
     if (err) {
+      logSecurityEvent({
+        event: 'SECURITY_SYSTEM_ERROR',
+        level: 'ERROR',
+        req,
+        userId,
+        username,
+        details: { action: 'logout', message: err.message },
+      });
       return res.status(500).json({ error: 'Could not log out.' });
     }
+
+    logSecurityEvent({
+      event: 'AUTH_LOGOUT',
+      req,
+      userId,
+      username,
+    });
+
     // Clear session cookie on browser client
     res.clearCookie(cookieName, { path: '/' });
     res.json({ message: 'Logged out successfully.' });

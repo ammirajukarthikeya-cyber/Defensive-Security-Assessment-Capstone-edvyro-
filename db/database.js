@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const { encryptSecret, decryptSecret } = require('../utils/crypto');
 
 const DEFAULT_DB_PATH = path.join(__dirname, 'app.sqlite');
 
@@ -32,18 +33,27 @@ function initDatabase(customPath) {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-      email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-      password_hash TEXT    NOT NULL,
-      totp_secret   TEXT    DEFAULT NULL,
-      totp_enabled  INTEGER DEFAULT 0,
-      created_at    TEXT    DEFAULT (datetime('now'))
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      username        TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+      email           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash   TEXT    NOT NULL,
+      totp_secret     TEXT    DEFAULT NULL,
+      totp_enabled    INTEGER DEFAULT 0,
+      last_totp_token TEXT    DEFAULT NULL,
+      created_at      TEXT    DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
   `);
+
+  // Non-destructive schema migration check for existing databases
+  try {
+    const columns = db.pragma('table_info(users)').map((c) => c.name);
+    if (!columns.includes('last_totp_token')) {
+      db.exec('ALTER TABLE users ADD COLUMN last_totp_token TEXT DEFAULT NULL;');
+    }
+  } catch (_) {}
 
   return db;
 }
@@ -83,28 +93,51 @@ function createUser(username, email, passwordHash) {
 function findUserByUsername(username) {
   const conn = getDatabase();
   const stmt = conn.prepare('SELECT * FROM users WHERE username = ?');
-  return stmt.get(username);
+  const user = stmt.get(username);
+  if (user && user.totp_secret) {
+    user._raw_totp_secret = user.totp_secret;
+    user.totp_secret = decryptSecret(user.totp_secret);
+  }
+  return user;
 }
 
 /** Find user by email */
 function findUserByEmail(email) {
   const conn = getDatabase();
   const stmt = conn.prepare('SELECT * FROM users WHERE email = ?');
-  return stmt.get(email);
+  const user = stmt.get(email);
+  if (user && user.totp_secret) {
+    user._raw_totp_secret = user.totp_secret;
+    user.totp_secret = decryptSecret(user.totp_secret);
+  }
+  return user;
 }
 
 /** Find user by ID */
 function findUserById(id) {
   const conn = getDatabase();
   const stmt = conn.prepare('SELECT * FROM users WHERE id = ?');
+  const user = stmt.get(id);
+  if (user && user.totp_secret) {
+    user._raw_totp_secret = user.totp_secret;
+    user.totp_secret = decryptSecret(user.totp_secret);
+  }
+  return user;
+}
+
+/** Find raw user record without automatic decryption (for cryptographic verification tests) */
+function getRawUserById(id) {
+  const conn = getDatabase();
+  const stmt = conn.prepare('SELECT * FROM users WHERE id = ?');
   return stmt.get(id);
 }
 
-/** Save TOTP secret for a user */
+/** Save TOTP secret for a user (encrypted at rest using AES-256-GCM) */
 function saveTotpSecret(userId, secret) {
   const conn = getDatabase();
+  const encryptedSecret = encryptSecret(secret);
   const stmt = conn.prepare('UPDATE users SET totp_secret = ? WHERE id = ?');
-  return stmt.run(secret, userId);
+  return stmt.run(encryptedSecret, userId);
 }
 
 /** Enable TOTP for a user */
@@ -118,9 +151,16 @@ function enableTotp(userId) {
 function disableTotp(userId) {
   const conn = getDatabase();
   const stmt = conn.prepare(
-    'UPDATE users SET totp_enabled = 0, totp_secret = NULL WHERE id = ?'
+    'UPDATE users SET totp_enabled = 0, totp_secret = NULL, last_totp_token = NULL WHERE id = ?'
   );
   return stmt.run(userId);
+}
+
+/** Track last successfully verified TOTP token to prevent OTP replay attacks */
+function updateLastTotpToken(userId, token) {
+  const conn = getDatabase();
+  const stmt = conn.prepare('UPDATE users SET last_totp_token = ? WHERE id = ?');
+  return stmt.run(token, userId);
 }
 
 module.exports = {
@@ -131,7 +171,9 @@ module.exports = {
   findUserByUsername,
   findUserByEmail,
   findUserById,
+  getRawUserById,
   saveTotpSecret,
   enableTotp,
   disableTotp,
+  updateLastTotpToken,
 };
