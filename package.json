@@ -5,12 +5,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test --test-concurrency=1 test/**/*.test.js",
+    "test:verbose": "node --test --test-concurrency=1 --test-reporter spec test/**/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.1.0",
     "connect-sqlite3": "^0.9.15",
+    "dotenv": "^18.0.7",
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.1",
     "express-session": "^1.18.1",
@@ -18,5 +21,8 @@
     "helmet": "^8.0.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
   }
 }

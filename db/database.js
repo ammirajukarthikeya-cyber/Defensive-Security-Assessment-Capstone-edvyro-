@@ -1,19 +1,33 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'app.sqlite');
+const DEFAULT_DB_PATH = path.join(__dirname, 'app.sqlite');
 
-let db;
+let db = null;
 
 /**
  * Initialise the SQLite database and create tables if they don't exist.
- * Uses WAL journal mode for better concurrent-read performance.
+ * Uses WAL journal mode for better concurrent-read performance (file databases),
+ * and enforces foreign keys and parameterized statements.
+ *
+ * @param {string} [customPath] - Optional custom path or ':memory:' for tests
  */
-function initDatabase() {
-  db = new Database(DB_PATH);
+function initDatabase(customPath) {
+  const dbPath = customPath || process.env.DB_PATH || DEFAULT_DB_PATH;
+
+  if (db) {
+    try {
+      db.close();
+    } catch (_) {}
+    db = null;
+  }
+
+  db = new Database(dbPath);
 
   // Performance & safety pragmas
-  db.pragma('journal_mode = WAL');
+  if (dbPath !== ':memory:') {
+    db.pragma('journal_mode = WAL');
+  }
   db.pragma('foreign_keys = ON');
 
   db.exec(`
@@ -34,51 +48,76 @@ function initDatabase() {
   return db;
 }
 
+/** Close active database connection */
+function closeDatabase() {
+  if (db) {
+    try {
+      db.close();
+    } catch (_) {}
+    db = null;
+  }
+}
+
+/** Get active database connection */
+function getDatabase() {
+  if (!db) {
+    return initDatabase();
+  }
+  return db;
+}
+
 // ---------------------------------------------------------------------------
-// Prepared Statements  (parameterised → SQL-injection safe)
+// Prepared Statements (parameterised -> SQL-injection safe)
 // ---------------------------------------------------------------------------
 
 /** Insert a new user */
 function createUser(username, email, passwordHash) {
-  const stmt = db.prepare(
+  const conn = getDatabase();
+  const stmt = conn.prepare(
     'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)'
   );
   return stmt.run(username, email, passwordHash);
 }
 
-/** Find user by username */
+/** Find user by username (case-insensitive via NOCASE collation) */
 function findUserByUsername(username) {
-  const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
+  const conn = getDatabase();
+  const stmt = conn.prepare('SELECT * FROM users WHERE username = ?');
   return stmt.get(username);
 }
 
 /** Find user by email */
 function findUserByEmail(email) {
-  const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
+  const conn = getDatabase();
+  const stmt = conn.prepare('SELECT * FROM users WHERE email = ?');
   return stmt.get(email);
 }
 
 /** Find user by ID */
 function findUserById(id) {
-  const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+  const conn = getDatabase();
+  const stmt = conn.prepare('SELECT * FROM users WHERE id = ?');
   return stmt.get(id);
 }
 
 /** Save TOTP secret for a user */
 function saveTotpSecret(userId, secret) {
-  const stmt = db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?');
+  const conn = getDatabase();
+  const stmt = conn.prepare('UPDATE users SET totp_secret = ? WHERE id = ?');
   return stmt.run(secret, userId);
 }
 
 /** Enable TOTP for a user */
 function enableTotp(userId) {
-  const stmt = db.prepare('UPDATE users SET totp_enabled = 1 WHERE id = ?');
+  const conn = getDatabase();
+  const stmt = conn.prepare('UPDATE users SET totp_enabled = 1 WHERE id = ?');
   return stmt.run(userId);
 }
 
 /** Disable TOTP for a user */
 function disableTotp(userId) {
-  const stmt = db.prepare(
+  const conn = getDatabase();
+  const stmt = conn.prepare(
     'UPDATE users SET totp_enabled = 0, totp_secret = NULL WHERE id = ?'
   );
   return stmt.run(userId);
@@ -86,6 +125,8 @@ function disableTotp(userId) {
 
 module.exports = {
   initDatabase,
+  closeDatabase,
+  getDatabase,
   createUser,
   findUserByUsername,
   findUserByEmail,
